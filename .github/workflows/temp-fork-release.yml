@@ -1,0 +1,46 @@
+name: Build release-plz (linux) and publish asset from temporary fork
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag name to create/update (e.g. patched-2026-02-12)"
+        required: true
+        default: "patched-latest"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release-plz (locked, release)
+        run: |
+          cargo build --locked --release -p release-plz
+          file target/release/release-plz
+          ./target/release/release-plz --version || true
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar -C target/release -czf dist/release-plz-linux-x86_64.tar.gz release-plz
+          sha256sum dist/release-plz-linux-x86_64.tar.gz | tee dist/SHA256SUMS
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          prerelease: true
+          files: |
+            dist/release-plz-linux-x86_64.tar.gz
+            dist/SHA256SUMS
